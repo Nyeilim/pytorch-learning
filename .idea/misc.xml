@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="pytorch-learning" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="pytorch-learning" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="aai" project-jdk-type="Python SDK" />
 </project>
