@@ -23,7 +23,7 @@ def train(net, train_iter, vocab, lr, num_epochs, device,
             net, train_iter, loss, updater, device, use_random_iter)
         if (epoch + 1) % 10 == 0:
             print(predict('我是金庸，一名侠客'))
-    print(f'困惑度 {ppl:.1f}, {speed:.1f} 词元/秒 {str(device)}')
+        print(f'困惑度 {ppl:.1f}, {speed:.1f} 词元/秒 {str(device)}')
     print("训练完成，最终预测：" + predict('我是金庸，一名侠客'))
 
 
@@ -58,7 +58,6 @@ def train_epoch(net, train_iter, loss, updater, device, use_random_iter):
             # 因为已经调用了mean函数
             updater(batch_size=1)
         metric.add(l * y.numel(), y.numel())
-    print("loss:" + l)
     return math.exp(metric[0] / metric[1]), metric[1] / timer.stop()
 
 
