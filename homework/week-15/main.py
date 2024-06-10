@@ -10,6 +10,9 @@ train_iter, vocab = load_data(batch_size, num_steps)  # 每次采样的小批量
 rnn = RNNModelScratch(len(vocab), num_hiddens, 'cuda')
 train(rnn, train_iter, vocab, lr, num_epochs, 'cuda', use_random_iter=True)
 
+print("--------------------------------------------------------------------------------")
+print("--------------------------------------------------------------------------------")
+
 num_hiddens_1, num_hiddens_2 = 512, 512
 w_rnn = WRNNModelScratch(len(vocab), num_hiddens_1, num_hiddens_2, 'cuda')
 train(rnn, train_iter, vocab, lr, num_epochs, 'cuda', use_random_iter=True)
