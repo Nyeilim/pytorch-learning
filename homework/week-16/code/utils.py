@@ -27,11 +27,16 @@ def pad_sents(sents, pad_token):
         than the max length sentence are padded out with the pad_token, such that
         each sentences in the batch now has equal length.
     """
-    sents_padded = []
+    sents_padded = [] # 填充结果
 
+    ### TODO
     ### YOUR CODE HERE (~6 Lines)
 
+    max_len = max(len(sent) for sent in sents) # 按照最长句子的长度进行填充
 
+    for sent in sents:
+        num_pad = max_len - len(sent) # 填充长度
+        sents_padded.append(sent + [pad_token] * num_pad)
 
     ### END YOUR CODE
 

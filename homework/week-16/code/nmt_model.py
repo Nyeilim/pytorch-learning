@@ -73,8 +73,24 @@ class NMT(nn.Module):
         ###     Dropout Layer:
         ###         https://pytorch.org/docs/stable/nn.html#torch.nn.Dropout
 
+        # 初始化模型的各个部分
+        # 编码器和解码器
+        self.encoder = nn.LSTM(input_size=embed_size, hidden_size=hidden_size, bidirectional=True)
+        self.decoder = nn.LSTMCell(input_size=embed_size + hidden_size, hidden_size=hidden_size)
 
+        # 线性投影层
+        self.h_projection = nn.Linear(2 * hidden_size, hidden_size, bias=False) # W_h
+        self.c_projection = nn.Linear(2 * hidden_size, hidden_size, bias=False) # W_c
 
+        # 注意力投影层
+        self.att_projection = nn.Linear(2 * hidden_size, hidden_size, bias=False)  # W_attProj
+        # 组合输出投影层
+        self.combined_output_projection = nn.Linear(3 * hidden_size, hidden_size, bias=False)  # W_u
+        # 目标词汇投影层
+        self.target_vocab_projection = nn.Linear(hidden_size, len(vocab.tgt), bias=False)  # W_vocab
+
+        # Dropout层
+        self.dropout = nn.Dropout(dropout_rate)
 
         ### END YOUR CODE
 
@@ -165,9 +181,20 @@ class NMT(nn.Module):
         ###     Tensor Permute:
         ###         https://pytorch.org/docs/stable/tensors.html#torch.Tensor.permute
 
+        # 转化成张量并打包
+        X = self.model_embeddings.source(source_padded) # 转换成 (src_len, b, e) 的张量
+        X_packed = pack_padded_sequence(X, source_lengths, batch_first=False, enforce_sorted=False) # 封装
 
+        # 过编码器，enc_hiddens 包含编码器的隐藏状态，last_hidden、last_cell 是编码器的最终隐藏状态和单元状态。
+        enc_hiddens, (last_hidden, last_cell) = self.encoder(X_packed)
 
+        # 转换为张量，维度 (src_len, b, h*2)
+        enc_hiddens, _ = pad_packed_sequence(enc_hiddens, batch_first=True)
 
+        # 计算解码器的初始状态，初始化的解码器状态是一个包含初始隐藏状态和单元状态的元组
+        init_decoder_hidden = self.h_projection(torch.cat((last_hidden[0], last_hidden[1]), dim=1))  # 对应PDF中的 h_0^{dec}
+        init_decoder_cell = self.c_projection(torch.cat((last_cell[0], last_cell[1]), dim=1))  # 对应PDF中的 c_0^{dec}
+        dec_init_state = (init_decoder_hidden, init_decoder_cell)
 
         ### END YOUR CODE
 
@@ -238,10 +265,22 @@ class NMT(nn.Module):
         ###     Tensor Stacking:
         ###         https://pytorch.org/docs/stable/torch.html#torch.stack
 
+        # 注意力投影，输出维度 (b, src_len, h)
+        enc_hiddens_proj = self.att_projection(enc_hiddens)
 
+        # 输出维度 (tgt_len, b, e)
+        Y = self.model_embeddings.target(target_padded)
 
+        # 使用 torch.split 函数迭代 Y 的时间维度。
+        for Y_t in torch.split(Y, 1, dim=0):
+            Y_t = torch.squeeze(Y_t, dim=0)
+            Ybar_t = torch.cat((Y_t, o_prev), dim=1)
+            dec_state, o_t, _ = self.step(Ybar_t, dec_state, enc_hiddens, enc_hiddens_proj, enc_masks) # 计算下一状态
+            combined_outputs.append(o_t)
+            o_prev = o_t
 
-
+        # 将 combined_outputs 从列表转换为张量，输出维度 (tgt_len, b, h)
+        combined_outputs = torch.stack(combined_outputs, dim=0)
 
         ### END YOUR CODE
 
@@ -300,8 +339,12 @@ class NMT(nn.Module):
         ###     Tensor Squeeze:
         ###         https://pytorch.org/docs/stable/torch.html#torch.squeeze
 
+        # 计算解码器的下一个状态
+        dec_state = self.decoder(Ybar_t, dec_state)
+        dec_hidden, dec_cell = dec_state[0], dec_state[1]
 
-
+        # 计算注意力分数 e_t，e_t 的形状是 (b, src_len)，表示每个源词对当前目标词的相关性。
+        e_t = torch.squeeze(torch.bmm(enc_hiddens_proj, torch.unsqueeze(dec_hidden, dim=2)), dim=2)
 
         ### END YOUR CODE
 
@@ -337,9 +380,16 @@ class NMT(nn.Module):
         ###     Tanh:
         ###         https://pytorch.org/docs/stable/torch.html#torch.tanh
 
+        # 计算注意力权重 alpha_t
+        alpha_t = F.softmax(e_t, dim=1)
 
+        # 计算注意力上下文向量 a_t
+        a_t = torch.squeeze(torch.bmm(torch.unsqueeze(alpha_t, 1), enc_hiddens), dim=1)
 
-
+        # 按照公式计算 U_t，V_t，O_t
+        U_t = torch.cat((a_t, dec_hidden), dim=1)
+        V_t = self.combined_output_projection(U_t)
+        O_t = self.dropout(torch.tanh(V_t))
 
         ### END YOUR CODE
 
